@@ -2,6 +2,7 @@ import { Telegraf } from "telegraf";
 import dotenv from "dotenv";
 import path from "path";
 import fs from "fs";
+import http from "http";
 
 dotenv.config();
 
@@ -930,6 +931,28 @@ bot.catch((error) => {
   console.error(error);
   console.error("====================================");
 });
+const PORT = process.env.PORT || 3000;
+
+http
+  .createServer((req, res) => {
+    if (req.url === "/health") {
+      res.writeHead(200, {
+        "Content-Type": "text/plain",
+      });
+
+      res.end("🍸 Bartender Bot is alive");
+      return;
+    }
+
+    res.writeHead(200, {
+      "Content-Type": "text/plain",
+    });
+
+    res.end("🍸 Bartender Bot");
+  })
+  .listen(PORT, () => {
+    console.log(`🌐 HTTP server running on port ${PORT}`);
+  });
 
 // =====================================================
 // START BOT
