@@ -12,21 +12,28 @@ const bot = new Telegraf(process.env.BOT_TOKEN!);
 // CONFIG
 // =====================================================
 
-// BOT HANYA AKTIF DI GRUP INI
-const ALLOWED_CHAT_USERNAME = "LYXERA1";
+const ALLOWED_CHAT_ID = -1003895327942;
 
-// TOPIC #beach & pool
 const ALLOWED_TOPIC_ID = 170270;
 
-// Folder foto
-const ASSETS_DIR = path.join(process.cwd(), "assets");
+const ASSETS_DIR = path.join(
+  process.cwd(),
+  "assets"
+);
+
+const BARTENDER_IMAGE = "bartender.webp";
+
+// Lama bartender membuat satu minuman
+const PREPARING_TIME = 5000;
 
 // =====================================================
-// HELPER WAIT
+// HELPER
 // =====================================================
 
 const WAIT = (ms: number) =>
-  new Promise((resolve) => setTimeout(resolve, ms));
+  new Promise((resolve) =>
+    setTimeout(resolve, ms)
+  );
 
 // =====================================================
 // TYPE
@@ -41,6 +48,12 @@ type Drink = {
   image: string;
 };
 
+type OrderStatus =
+  | "WAITING"
+  | "PROCESSING"
+  | "DONE"
+  | "CANCELLED";
+
 type Order = {
   id: number;
   orderNumber: string;
@@ -54,11 +67,13 @@ type Order = {
 
   drink: Drink;
 
-  status: "WAITING" | "PROCESSING" | "DONE";
+  status: OrderStatus;
+
+  createdAt: number;
 };
 
 // =====================================================
-// MENU 10 MINUMAN
+// MENU
 // =====================================================
 
 const drinks: Drink[] = [
@@ -112,7 +127,8 @@ const drinks: Drink[] = [
     name: "Mojito",
     emoji: "🍹",
     description: "Mojito mint yang menyegarkan",
-    ingredients: "Rum + Mint + Lime + Soda",
+    ingredients:
+      "Rum + Mint + Lime + Soda",
     image: "mojito.jpg",
   },
 
@@ -121,7 +137,8 @@ const drinks: Drink[] = [
     name: "Margarita",
     emoji: "🍸",
     description: "Margarita klasik",
-    ingredients: "Tequila + Lime + Triple Sec",
+    ingredients:
+      "Tequila + Lime + Triple Sec",
     image: "margarita.jpg",
   },
 
@@ -130,7 +147,8 @@ const drinks: Drink[] = [
     name: "Gin Tonic",
     emoji: "🍸",
     description: "Gin dengan tonic",
-    ingredients: "Gin + Tonic + Lime",
+    ingredients:
+      "Gin + Tonic + Lime",
     image: "gintonic.jpg",
   },
 
@@ -138,8 +156,10 @@ const drinks: Drink[] = [
     command: "oldfashioned",
     name: "Old Fashioned",
     emoji: "🥃",
-    description: "Cocktail klasik premium",
-    ingredients: "Whisky + Bitters + Sugar",
+    description:
+      "Cocktail klasik premium",
+    ingredients:
+      "Whisky + Bitters + Sugar",
     image: "oldfashioned.jpg",
   },
 
@@ -147,14 +167,16 @@ const drinks: Drink[] = [
     command: "pinacolada",
     name: "Piña Colada",
     emoji: "🍹",
-    description: "Minuman tropis creamy",
-    ingredients: "Rum + Coconut + Pineapple",
+    description:
+      "Minuman tropis creamy",
+    ingredients:
+      "Rum + Coconut + Pineapple",
     image: "pinacolada.jpg",
   },
 ];
 
 // =====================================================
-// GLOBAL QUEUE
+// QUEUE
 // =====================================================
 
 const orderQueue: Order[] = [];
@@ -165,15 +187,18 @@ let isProcessing = false;
 
 // =====================================================
 // NOMOR PESANAN
-// RESET SETIAP 00:00 WIB
+// RESET 00:00 WIB
 // =====================================================
 
 let lastResetDate = getTodayDate();
 
 function getTodayDate(): string {
-  return new Date().toLocaleDateString("en-CA", {
-    timeZone: "Asia/Jakarta",
-  });
+  return new Date().toLocaleDateString(
+    "en-CA",
+    {
+      timeZone: "Asia/Jakarta",
+    }
+  );
 }
 
 function getNextOrderNumber(): string {
@@ -181,16 +206,36 @@ function getNextOrderNumber(): string {
 
   if (today !== lastResetDate) {
     nextOrderId = 1;
+
     lastResetDate = today;
 
-    console.log("====================================");
-    console.log("🔄 NOMOR PESANAN DI-RESET");
-    console.log("📅 Tanggal:", today);
-    console.log("🎫 Nomor berikutnya: #001");
-    console.log("====================================");
+    console.log(
+      "===================================="
+    );
+
+    console.log(
+      "🔄 NOMOR PESANAN DI-RESET"
+    );
+
+    console.log(
+      "📅 Tanggal:",
+      today
+    );
+
+    console.log(
+      "🎫 Nomor berikutnya: #001"
+    );
+
+    console.log(
+      "===================================="
+    );
   }
 
-  const number = String(nextOrderId).padStart(3, "0");
+  const number =
+    String(nextOrderId).padStart(
+      3,
+      "0"
+    );
 
   nextOrderId++;
 
@@ -201,27 +246,34 @@ function getNextOrderNumber(): string {
 // ESCAPE HTML
 // =====================================================
 
-function escapeHtml(text: string): string {
+function escapeHtml(
+  text: string
+): string {
   return text
     .replace(/&/g, "&amp;")
     .replace(/</g, "&lt;")
     .replace(/>/g, "&gt;")
-    .replace(/"/g, "&quot;");
+    .replace(
+      /"/g,
+      "&quot;"
+    )
+    .replace(
+      /'/g,
+      "&#039;"
+    );
 }
 
 // =====================================================
 // USER MENTION
 // =====================================================
 
-// Kalau user punya username:
-// @username
-
-// Kalau tidak punya username:
-// dibuat clickable mention menggunakan Telegram user ID.
-
-function getUserMention(order: Order): string {
+function getUserMention(
+  order: Order
+): string {
   if (order.username) {
-    return `@${escapeHtml(order.username)}`;
+    return `@${escapeHtml(
+      order.username
+    )}`;
   }
 
   return `<a href="tg://user?id=${order.userId}">${escapeHtml(
@@ -230,43 +282,53 @@ function getUserMention(order: Order): string {
 }
 
 // =====================================================
-// IMAGE PATH
+// IMAGE
 // =====================================================
 
-function getImagePath(image: string): string {
-  return path.join(ASSETS_DIR, image);
+function getImagePath(
+  image: string
+): string {
+  return path.join(
+    ASSETS_DIR,
+    image
+  );
 }
 
 // =====================================================
 // CHECK TOPIC
 // =====================================================
 
-function isAllowedTopic(ctx: any): boolean {
+function isAllowedTopic(
+  ctx: any
+): boolean {
   if (!ctx.chat) {
     return false;
   }
 
-  // Harus grup / supergroup
   if (
-    ctx.chat.type !== "group" &&
-    ctx.chat.type !== "supergroup"
+    ctx.chat.type !==
+      "group" &&
+    ctx.chat.type !==
+      "supergroup"
   ) {
     return false;
   }
 
-  // Harus grup LYXERA1
   if (
-    ctx.chat.username?.toLowerCase() !==
-    ALLOWED_CHAT_USERNAME.toLowerCase()
+    ctx.chat.id !==
+    ALLOWED_CHAT_ID
   ) {
     return false;
   }
 
-  // Ambil message_thread_id
-  const threadId = ctx.message?.message_thread_id;
+  const threadId =
+    ctx.message
+      ?.message_thread_id;
 
-  // Harus topic yang ditentukan
-  if (threadId !== ALLOWED_TOPIC_ID) {
+  if (
+    threadId !==
+    ALLOWED_TOPIC_ID
+  ) {
     return false;
   }
 
@@ -275,42 +337,111 @@ function isAllowedTopic(ctx: any): boolean {
 
 // =====================================================
 // MIDDLEWARE
-// BOT HANYA BOLEH DI TOPIC BEACH & POOL
 // =====================================================
 
-bot.use(async (ctx, next) => {
-  if (!isAllowedTopic(ctx)) {
-    return;
+bot.use(
+  async (ctx, next) => {
+    if (
+      !isAllowedTopic(ctx)
+    ) {
+      return;
+    }
+
+    await next();
+  }
+);
+
+// =====================================================
+// BUILD QUEUE MESSAGE
+// =====================================================
+
+function buildQueueMessage(): string {
+  const activeOrders =
+    orderQueue
+      .filter(
+        (order) =>
+          order.status ===
+          "WAITING" ||
+          order.status ===
+          "PROCESSING"
+      )
+      .sort(
+        (a, b) =>
+          a.createdAt -
+          b.createdAt
+      );
+
+  if (
+    activeOrders.length ===
+    0
+  ) {
+    return `
+📝 <b>PESANAN</b>
+
+Tidak ada pesanan.
+`;
   }
 
-  await next();
-});
+  let message = `
+📝 <b>PESANAN</b>
+
+`;
+
+  activeOrders.forEach(
+    (order) => {
+      message += `
+🎫 <b>#${order.orderNumber}</b> • ${order.drink.emoji} ${escapeHtml(
+        order.drink.name
+      )}
+👤 Atas nama ${getUserMention(
+        order
+      )}
+`;
+
+      if (
+        order.status ===
+        "PROCESSING"
+      ) {
+        message +=
+          "👨‍🍳 <i>Sedang dibuat...</i>\n";
+      }
+
+      message += "\n";
+    }
+  );
+
+  return message;
+}
 
 // =====================================================
 // MENU
 // =====================================================
 
-bot.command("menu", async (ctx) => {
-  let message = `
-🍸 <b>BAR MENU</b> 🍸
+bot.command(
+  "menu",
+  async (ctx) => {
+    let message = `
+🍸 <b>BAR MENU</b>
 
 ━━━━━━━━━━━━━━━━━━
 `;
 
-  drinks.forEach((drink, index) => {
-    message += `
+    drinks.forEach(
+      (drink, index) => {
+        message += `
 ${index + 1}. ${drink.emoji} <b>${drink.name}</b>
    ${drink.description}
    🥃 ${drink.ingredients}
 
    👉 /${drink.command}
 `;
-  });
+      }
+    );
 
-  message += `
+    message += `
 ━━━━━━━━━━━━━━━━━━
 
-🍹 <b>CARA PESAN</b>
+📝 <b>CARA PESAN</b>
 
 Ketik command minuman.
 
@@ -318,473 +449,372 @@ Contoh:
 
 <code>/vodka</code>
 
-Semua pesanan masuk ke
-satu antrean bartender.
+Pesanan akan masuk ke
+antrean sesuai urutan.
 
-🎫 Nomor pesanan reset
-setiap 00:00 WIB.
-
-📍 Topic:
-<b>#beach &amp; pool</b>
+🎫 Nomor reset setiap
+00:00 WIB.
 `;
 
-  await ctx.reply(message, {
-    parse_mode: "HTML",
-    message_thread_id: ALLOWED_TOPIC_ID,
-  } as any);
-});
+    await ctx.reply(
+      message,
+      {
+        parse_mode:
+          "HTML",
+
+        message_thread_id:
+          ALLOWED_TOPIC_ID,
+      } as any
+    );
+  }
+);
 
 // =====================================================
 // START
 // =====================================================
 
-bot.start(async (ctx) => {
-  await ctx.reply(
-    `
-🍸 <b>WELCOME TO THE BAR</b> 🍸
+bot.start(
+  async (ctx) => {
+    await ctx.reply(
+      `
+🍸 <b>WELCOME TO LYXERA BAR</b>
 
-Selamat datang!
-
-Silahkan lihat menu:
+Silakan lihat menu:
 
 👉 /menu
 
-Untuk memesan cukup ketik
-command minuman.
-
-Contoh:
+Contoh pesan:
 
 <code>/vodka</code>
+<code>/gin</code>
+<code>/rum</code>
 
-Semua pesanan akan masuk
-ke antrean bartender.
-
-🎫 Nomor reset setiap
-00:00 WIB.
+Pesanan akan masuk ke antrean.
 `,
-    {
-      parse_mode: "HTML",
-      message_thread_id: ALLOWED_TOPIC_ID,
-    } as any
-  );
-});
+      {
+        parse_mode:
+          "HTML",
+
+        message_thread_id:
+          ALLOWED_TOPIC_ID,
+      } as any
+    );
+  }
+);
 
 // =====================================================
 // STATUS
 // =====================================================
 
-bot.command("status", async (ctx) => {
-  const waiting = orderQueue.filter(
-    (order) => order.status === "WAITING"
-  ).length;
+bot.command(
+  "status",
+  async (ctx) => {
+    const waiting =
+      orderQueue.filter(
+        (order) =>
+          order.status ===
+          "WAITING"
+      ).length;
 
-  const processing = orderQueue.filter(
-    (order) => order.status === "PROCESSING"
-  ).length;
+    const processing =
+      orderQueue.filter(
+        (order) =>
+          order.status ===
+          "PROCESSING"
+      ).length;
 
-  const done = orderQueue.filter(
-    (order) => order.status === "DONE"
-  ).length;
+    const done =
+      orderQueue.filter(
+        (order) =>
+          order.status ===
+          "DONE"
+      ).length;
 
-  await ctx.reply(
-    `
+    await ctx.reply(
+      `
 🍸 <b>STATUS BAR</b>
 
 ━━━━━━━━━━━━━━━━━━
 
 ⏳ Menunggu   : ${waiting}
-🍹 Dibuat     : ${processing}
+👨‍🍳 Dibuat     : ${processing}
 ✅ Selesai    : ${done}
 
-🎫 Nomor berikutnya:
-<b>#${String(nextOrderId).padStart(3, "0")}</b>
+🎫 Berikutnya:
+<b>#${String(
+        nextOrderId
+      ).padStart(
+        3,
+        "0"
+      )}</b>
 
 ━━━━━━━━━━━━━━━━━━
 `,
-    {
-      parse_mode: "HTML",
-      message_thread_id: ALLOWED_TOPIC_ID,
-    } as any
-  );
-});
+      {
+        parse_mode:
+          "HTML",
+
+        message_thread_id:
+          ALLOWED_TOPIC_ID,
+      } as any
+    );
+  }
+);
 
 // =====================================================
 // ANTRIAN
 // =====================================================
 
-bot.command("antrian", async (ctx) => {
-  const waitingOrders = orderQueue.filter(
-    (order) => order.status === "WAITING"
-  );
-
-  if (waitingOrders.length === 0) {
+bot.command(
+  "antrian",
+  async (ctx) => {
     await ctx.reply(
-      "🍸 Saat ini tidak ada antrean.",
+      buildQueueMessage(),
       {
-        message_thread_id: ALLOWED_TOPIC_ID,
+        parse_mode:
+          "HTML",
+
+        message_thread_id:
+          ALLOWED_TOPIC_ID,
       } as any
     );
+  }
+);
 
+// =====================================================
+// PROSES PESANAN SATU PER SATU
+// =====================================================
+
+async function processNextOrder() {
+  if (
+    isProcessing
+  ) {
     return;
   }
 
-  let message = `
-📋 <b>ANTRIAN BAR</b>
+  const nextOrder =
+    orderQueue
+      .filter(
+        (order) =>
+          order.status ===
+          "WAITING"
+      )
+      .sort(
+        (a, b) =>
+          a.createdAt -
+          b.createdAt
+      )[0];
 
-━━━━━━━━━━━━━━━━━━
-`;
-
-  waitingOrders.forEach((order, index) => {
-    message += `
-${index + 1}. 🎫 <b>#${order.orderNumber}</b>
-   ${order.drink.emoji} ${order.drink.name}
-   👤 ${getUserMention(order)}
-`;
-  });
-
-  message += `
-━━━━━━━━━━━━━━━━━━
-`;
-
-  await ctx.reply(message, {
-    parse_mode: "HTML",
-    message_thread_id: ALLOWED_TOPIC_ID,
-  } as any);
-});
-
-// =====================================================
-// PROSES QUEUE
-// =====================================================
-
-async function processQueue() {
-  if (isProcessing) {
+  if (!nextOrder) {
     return;
   }
 
   isProcessing = true;
 
-  while (true) {
-    const order = orderQueue.find(
-      (item) => item.status === "WAITING"
-    );
+  nextOrder.status =
+    "PROCESSING";
 
-    if (!order) {
-      break;
-    }
+  console.log(
+    "===================================="
+  );
 
-    order.status = "PROCESSING";
+  console.log(
+    "👨‍🍳 MULAI MEMBUAT"
+  );
 
-    await processOrder(order);
-  }
+  console.log(
+    "🎫 #",
+    nextOrder.orderNumber
+  );
 
-  isProcessing = false;
-}
+  console.log(
+    "🍸",
+    nextOrder.drink.name
+  );
 
-// =====================================================
-// PROSES SATU ORDER
-// =====================================================
+  console.log(
+    "👤",
+    nextOrder.displayName
+  );
 
-async function processOrder(order: Order) {
-  const { drink } = order;
+  console.log(
+    "===================================="
+  );
 
   try {
     // =================================================
-    // STEP 1
-    // PESANAN MULAI
+    // PESANAN SEDANG DIBUAT
     // =================================================
 
-    await bot.telegram.sendMessage(
-      order.chatId,
-      `
-🍸 <b>PESANAN #${order.orderNumber}</b>
+    const preparingText = `
+👨‍🍳 <b>MEMBUAT PESANAN</b>
 
-Baik, pesanan sudah dicatat.
+🎫 <b>#${nextOrder.orderNumber}</b>
+${nextOrder.drink.emoji} <b>${escapeHtml(
+      nextOrder.drink.name
+    )}</b>
 
-${drink.emoji} <b>${drink.name}</b>
+👤 Atas nama ${getUserMention(
+      nextOrder
+    )}
 
-Mohon tunggu sebentar...
-`,
-      {
-        parse_mode: "HTML",
-        message_thread_id: order.topicId,
-      } as any
-    );
+⏳ Sedang dibuat...
+`;
 
-    await WAIT(1500);
+    const imagePath =
+      getImagePath(
+        BARTENDER_IMAGE
+      );
 
-    // =================================================
-    // STEP 2
-    // SENYUM
-    // =================================================
-
-    await bot.telegram.sendMessage(
-      order.chatId,
-      `
-😊 Bartender tersenyum...
-
-"Baik, saya siapkan pesanannya."
-`,
-      {
-        message_thread_id: order.topicId,
-      } as any
-    );
-
-    await WAIT(1200);
-
-    // =================================================
-    // STEP 3
-    // BOW
-    // =================================================
-
-    await bot.telegram.sendMessage(
-      order.chatId,
-      `
-🙇 Bartender membungkuk 45°
-
-"Terima kasih."
-`,
-      {
-        message_thread_id: order.topicId,
-      } as any
-    );
-
-    await WAIT(1200);
-
-    // =================================================
-    // STEP 4
-    // MENUJU BAR
-    // =================================================
-
-    await bot.telegram.sendMessage(
-      order.chatId,
-      `
-🚶 Bartender pergi menuju bar...
-
-🍸 Mulai menyiapkan:
-
-<b>${drink.name}</b>
-`,
-      {
-        parse_mode: "HTML",
-        message_thread_id: order.topicId,
-      } as any
-    );
-
-    await WAIT(1800);
-
-    // =================================================
-    // STEP 5
-    // FOTO BARTENDER
-    // =================================================
-
-    const bartenderImagePath =
-      getImagePath("bartender.webp");
-
-    if (fs.existsSync(bartenderImagePath)) {
+    if (
+      fs.existsSync(
+        imagePath
+      )
+    ) {
       await bot.telegram.sendPhoto(
-        order.chatId,
+        nextOrder.chatId,
         {
-          source: bartenderImagePath,
+          source: imagePath,
         },
         {
-          caption: `
-🍸 <b>SEDANG DIBUAT</b>
+          caption:
+            preparingText,
+          parse_mode:
+            "HTML",
 
-🎫 Nomor : <b>#${order.orderNumber}</b>
-🍹 Pesanan : <b>${drink.name}</b>
-
-👨‍🍳 Bartender sedang meracik
-pesanan Anda...
-
-Mohon tunggu sebentar.
-`,
-          parse_mode: "HTML",
-          message_thread_id: order.topicId,
+          message_thread_id:
+            nextOrder.topicId,
         } as any
       );
     } else {
       await bot.telegram.sendMessage(
-        order.chatId,
-        `
-🍸 <b>SEDANG DIBUAT</b>
-
-🎫 Nomor : <b>#${order.orderNumber}</b>
-🍹 Pesanan : <b>${drink.name}</b>
-
-👨‍🍳 Bartender sedang meracik
-pesanan Anda...
-
-Mohon tunggu sebentar.
-`,
+        nextOrder.chatId,
+        preparingText,
         {
-          parse_mode: "HTML",
-          message_thread_id: order.topicId,
+          parse_mode:
+            "HTML",
+
+          message_thread_id:
+            nextOrder.topicId,
         } as any
       );
     }
 
-    await WAIT(3000);
-
     // =================================================
-    // STEP 6
-    // HAMPIR SELESAI
+    // TUNGGU
     // =================================================
 
-    await bot.telegram.sendMessage(
-      order.chatId,
-      `
-🍸 Hampir selesai...
-
-✨ Menambahkan sentuhan terakhir.
-`,
-      {
-        message_thread_id: order.topicId,
-      } as any
-    );
-
-    await WAIT(2000);
-
-    // =================================================
-    // STEP 7
-    // ANTAR PESANAN
-    // =================================================
-
-    await bot.telegram.sendMessage(
-      order.chatId,
-      `
-🚶 Bartender menaruh pesanan anda di meja bartender...
-
-🍸 <b>${drink.name}</b>
-🎫 Nomor <b>#${order.orderNumber}</b>
-`,
-      {
-        parse_mode: "HTML",
-        message_thread_id: order.topicId,
-      } as any
-    );
-
-    await WAIT(1800);
-
-    // =================================================
-    // STEP 8
-    // FOTO MINUMAN
-    // =================================================
-
-    const drinkImagePath =
-      getImagePath(drink.image);
-
-    if (fs.existsSync(drinkImagePath)) {
-      await bot.telegram.sendPhoto(
-        order.chatId,
-        {
-          source: drinkImagePath,
-        },
-        {
-          caption: `
-━━━━━━━━━━━━━━━━━━
-🍸 <b>PESANAN SELESAI</b>
-━━━━━━━━━━━━━━━━━━
-
-🎫 Nomor : <b>#${order.orderNumber}</b>
-
-${drink.emoji} <b>${drink.name}</b>
-
-✨ Pesanan sudah selesai.
-
-Silahkan dinikmati. 🍹
-`,
-          parse_mode: "HTML",
-          message_thread_id: order.topicId,
-        } as any
-      );
-    } else {
-      await bot.telegram.sendMessage(
-        order.chatId,
-        `
-━━━━━━━━━━━━━━━━━━
-🍸 <b>PESANAN SELESAI</b>
-━━━━━━━━━━━━━━━━━━
-
-🎫 Nomor : <b>#${order.orderNumber}</b>
-
-${drink.emoji} <b>${drink.name}</b>
-
-✨ Pesanan sudah selesai.
-
-Silahkan dinikmati. 🍹
-`,
-        {
-          parse_mode: "HTML",
-          message_thread_id: order.topicId,
-        } as any
-      );
-    }
-
-    await WAIT(1000);
-
-    // =================================================
-    // STEP 9
-    // SENYUM + BOW
-    // =================================================
-
-    await bot.telegram.sendMessage(
-      order.chatId,
-      `
-😊 Bartender tersenyum.
-
-🙇 Bartender membungkuk 45°
-
-"Selamat menikmati."
-`,
-      {
-        message_thread_id: order.topicId,
-      } as any
-    );
-
-    await WAIT(800);
-
-    // =================================================
-    // STEP 10
-    // TAG USER
-    // =================================================
-
-    const mention = getUserMention(order);
-
-    await bot.telegram.sendMessage(
-      order.chatId,
-      `
-📢 <b>Pesanan ${mention} sudah selesai,
-harap diambil.</b>
-
-🍸 Pesanan : <b>${drink.name}</b>
-🎫 Nomor   : <b>#${order.orderNumber}</b>
-
-━━━━━━━━━━━━━━━━━━
-✨ Terima kasih sudah memesan!
-━━━━━━━━━━━━━━━━━━
-`,
-      {
-        parse_mode: "HTML",
-        message_thread_id: order.topicId,
-      } as any
+    await WAIT(
+      PREPARING_TIME
     );
 
     // =================================================
-    // DONE
+    // SELESAI
     // =================================================
 
-    order.status = "DONE";
+    nextOrder.status =
+      "DONE";
+
+    await bot.telegram.sendMessage(
+      nextOrder.chatId,
+      `
+✅ <b>PESANAN SELESAI</b>
+
+🎫 <b>#${nextOrder.orderNumber}</b>
+${nextOrder.drink.emoji} <b>${escapeHtml(
+        nextOrder.drink.name
+      )}</b>
+
+👤 Atas nama ${getUserMention(
+        nextOrder
+      )}
+
+📢 Silakan mengambil pesanan.
+`,
+      {
+        parse_mode:
+          "HTML",
+
+        message_thread_id:
+          nextOrder.topicId,
+      } as any
+    );
 
     console.log(
-      `✅ #${order.orderNumber} | ${drink.name} | ${order.displayName} | DONE`
+      `✅ #${nextOrder.orderNumber} | ${nextOrder.drink.name} | ${nextOrder.displayName} | DONE`
     );
+
+    // =================================================
+    // CEK PESANAN BERIKUTNYA
+    // =================================================
+
+    const remainingOrders =
+      orderQueue
+        .filter(
+          (order) =>
+            order.status ===
+            "WAITING"
+        )
+        .sort(
+          (a, b) =>
+            a.createdAt -
+            b.createdAt
+        );
+
+    if (
+      remainingOrders.length >
+      0
+    ) {
+      await WAIT(500);
+
+      await bot.telegram.sendMessage(
+        nextOrder.chatId,
+        `
+🍸 <b>PESANAN BERIKUTNYA</b>
+
+${buildQueueMessage()}
+`,
+        {
+          parse_mode:
+            "HTML",
+
+          message_thread_id:
+            nextOrder.topicId,
+        } as any
+      );
+    }
   } catch (error) {
     console.error(
-      `❌ Error order #${order.orderNumber}:`,
+      "❌ Error membuat pesanan:",
       error
     );
 
-    order.status = "DONE";
+    nextOrder.status =
+      "WAITING";
+  } finally {
+    isProcessing =
+      false;
+
+    // =================================================
+    // JIKA ADA PESANAN LAIN,
+    // OTOMATIS PROSES BERIKUTNYA
+    // =================================================
+
+    const remaining =
+      orderQueue.filter(
+        (order) =>
+          order.status ===
+          "WAITING"
+      );
+
+    if (
+      remaining.length >
+      0
+    ) {
+      setTimeout(() => {
+        processNextOrder();
+      }, 1000);
+    }
   }
 }
 
@@ -792,117 +822,162 @@ harap diambil.</b>
 // COMMAND SEMUA MINUMAN
 // =====================================================
 
-drinks.forEach((drink) => {
-  bot.command(drink.command, async (ctx) => {
-    if (!ctx.from || !ctx.chat) {
-      return;
-    }
+drinks.forEach(
+  (drink) => {
+    bot.command(
+      drink.command,
+      async (ctx) => {
+        if (
+          !ctx.from ||
+          !ctx.chat
+        ) {
+          return;
+        }
 
+        const threadId =
+          ctx.message
+            ?.message_thread_id;
+
+        if (
+          threadId !==
+          ALLOWED_TOPIC_ID
+        ) {
+          return;
+        }
+
+        const username =
+          ctx.from.username ||
+          "";
+
+        const displayName =
+          [
+            ctx.from.first_name,
+            ctx.from.last_name,
+          ]
+            .filter(Boolean)
+            .join(" ") ||
+          `User ${ctx.from.id}`;
+
+        // =================================================
+        // BUAT ORDER NUMBER
+        // =================================================
+
+        const orderNumber =
+          getNextOrderNumber();
+
+        // =================================================
+        // BUAT ORDER
+        // =================================================
+
+        const order: Order = {
+          id:
+            Date.now() +
+            Math.floor(
+              Math.random() *
+                1000
+            ),
+
+          orderNumber,
+
+          chatId:
+            ctx.chat.id,
+
+          topicId:
+            threadId,
+
+          userId:
+            ctx.from.id,
+
+          username,
+
+          displayName,
+
+          drink,
+
+          status:
+            "WAITING",
+
+          createdAt:
+            Date.now(),
+        };
+
+        // =================================================
+        // MASUK QUEUE
+        // =================================================
+
+        orderQueue.push(
+          order
+        );
+
+        console.log(
+          "===================================="
+        );
+
+        console.log(
+          "📥 PESANAN MASUK"
+        );
+
+        console.log(
+          "🎫 #",
+          order.orderNumber
+        );
+
+        console.log(
+          "🍸",
+          drink.name
+        );
+
+        console.log(
+          "👤",
+          displayName
+        );
+
+        console.log(
+          "===================================="
+        );
+
+        // =================================================
+        // TAMPILKAN PESANAN
+        // =================================================
+
+        await ctx.reply(
+          buildQueueMessage(),
+          {
+            parse_mode:
+              "HTML",
+
+            message_thread_id:
+              ALLOWED_TOPIC_ID,
+          } as any
+        );
+
+        // =================================================
+        // MULAI PROSES
+        // =================================================
+
+        if (
+          !isProcessing
+        ) {
+          processNextOrder();
+        }
+      }
+    );
+  }
+);
+
+// =====================================================
+// TOPIC ID
+// =====================================================
+
+bot.command(
+  "topicid",
+  async (ctx) => {
     const threadId =
-      ctx.message?.message_thread_id;
-
-    // Pastikan command memang diketik
-    // di topic yang benar
-    if (threadId !== ALLOWED_TOPIC_ID) {
-      return;
-    }
-
-    const username =
-      ctx.from.username || "";
-
-    const displayName =
-      [
-        ctx.from.first_name,
-        ctx.from.last_name,
-      ]
-        .filter(Boolean)
-        .join(" ") ||
-      `User ${ctx.from.id}`;
-
-    const orderNumber =
-      getNextOrderNumber();
-
-    const order: Order = {
-      id: Date.now(),
-
-      orderNumber,
-
-      chatId: ctx.chat.id,
-
-      topicId: threadId,
-
-      userId: ctx.from.id,
-
-      username,
-
-      displayName,
-
-      drink,
-
-      status: "WAITING",
-    };
-
-    orderQueue.push(order);
-
-    const queuePosition =
-      orderQueue.filter(
-        (item) => item.status === "WAITING"
-      ).length;
-
-    const mention = getUserMention(order);
-
-    console.log("====================================");
-    console.log("📥 ORDER MASUK");
-    console.log("🎫 Nomor:", order.orderNumber);
-    console.log("🍸 Minuman:", drink.name);
-    console.log("👤 User:", displayName);
-    console.log("📋 Queue:", queuePosition);
-    console.log("====================================");
+      ctx.message
+        ?.message_thread_id;
 
     await ctx.reply(
       `
-🍸 <b>PESANAN DITERIMA</b>
-
-━━━━━━━━━━━━━━━━━━
-
-🎫 Nomor : <b>#${order.orderNumber}</b>
-🍹 Minuman : <b>${drink.name}</b>
-
-👤 Pemesan : ${mention}
-
-📋 Posisi antrean : <b>${queuePosition}</b>
-
-━━━━━━━━━━━━━━━━━━
-
-😊 Bartender akan segera
-menyiapkan pesanan Anda.
-
-Mohon tunggu...
-`,
-      {
-        parse_mode: "HTML",
-        message_thread_id: ALLOWED_TOPIC_ID,
-      } as any
-    );
-
-    // Jalankan queue
-    processQueue();
-  });
-});
-
-// =====================================================
-// DEBUG TOPIC
-// =====================================================
-
-// Bisa digunakan kalau ingin mengecek ID topic.
-// Hanya aktif di topic yang sudah diizinkan.
-
-bot.command("topicid", async (ctx) => {
-  const threadId =
-    ctx.message?.message_thread_id;
-
-  await ctx.reply(
-    `
 🆔 <b>TOPIC INFORMATION</b>
 
 Chat:
@@ -914,44 +989,113 @@ Topic ID:
 Configured Topic:
 <code>${ALLOWED_TOPIC_ID}</code>
 `,
-    {
-      parse_mode: "HTML",
-      message_thread_id: ALLOWED_TOPIC_ID,
-    } as any
-  );
-});
+      {
+        parse_mode:
+          "HTML",
+
+        message_thread_id:
+          ALLOWED_TOPIC_ID,
+      } as any
+    );
+  }
+);
+
+// =====================================================
+// DEBUG
+// =====================================================
+
+bot.command(
+  "debug",
+  async (ctx) => {
+    await ctx.reply(
+      `
+🔧 <b>DEBUG</b>
+
+Chat:
+<code>${ctx.chat.id}</code>
+
+Username:
+<code>${ctx.chat.username ?? "-"}</code>
+
+Topic:
+<code>${
+        ctx.message
+          ?.message_thread_id ??
+        "-"
+      }</code>
+`,
+      {
+        parse_mode:
+          "HTML",
+
+        message_thread_id:
+          ALLOWED_TOPIC_ID,
+      } as any
+    );
+  }
+);
 
 // =====================================================
 // ERROR HANDLER
 // =====================================================
 
 bot.catch((error) => {
-  console.error("====================================");
-  console.error("❌ BOT ERROR");
+  console.error(
+    "===================================="
+  );
+
+  console.error(
+    "❌ BOT ERROR"
+  );
+
   console.error(error);
-  console.error("====================================");
+
+  console.error(
+    "===================================="
+  );
 });
-const PORT = process.env.PORT || 3000;
+
+// =====================================================
+// HTTP SERVER
+// UNTUK HOSTING
+// =====================================================
+
+const PORT =
+  process.env.PORT || 3000;
 
 http
-  .createServer((req, res) => {
-    if (req.url === "/health") {
+  .createServer(
+    (req, res) => {
+      if (
+        req.url ===
+        "/health"
+      ) {
+        res.writeHead(200, {
+          "Content-Type":
+            "text/plain",
+        });
+
+        res.end(
+          "🍸 Bartender Bot is alive"
+        );
+
+        return;
+      }
+
       res.writeHead(200, {
-        "Content-Type": "text/plain",
+        "Content-Type":
+          "text/plain",
       });
 
-      res.end("🍸 Bartender Bot is alive");
-      return;
+      res.end(
+        "🍸 LYXERA BAR BOT"
+      );
     }
-
-    res.writeHead(200, {
-      "Content-Type": "text/plain",
-    });
-
-    res.end("🍸 Bartender Bot");
-  })
+  )
   .listen(PORT, () => {
-    console.log(`🌐 HTTP server running on port ${PORT}`);
+    console.log(
+      `🌐 HTTP server running on port ${PORT}`
+    );
   });
 
 // =====================================================
@@ -960,25 +1104,72 @@ http
 
 bot.launch();
 
-console.log("====================================");
-console.log("🍸 BARTENDER BOT AKTIF");
-console.log("====================================");
-console.log("🏠 Group  :", ALLOWED_CHAT_USERNAME);
-console.log("📌 Topic  : #beach & pool");
-console.log("🆔 Topic  :", ALLOWED_TOPIC_ID);
-console.log("🍹 Menu   :", drinks.length, "minuman");
-console.log("📋 Queue  : GLOBAL");
-console.log("🎫 Reset  : 00:00 WIB");
-console.log("====================================");
+console.log(
+  "===================================="
+);
+
+console.log(
+  "🍸 LYXERA BAR BOT AKTIF"
+);
+
+console.log(
+  "===================================="
+);
+
+console.log(
+  "🏠 Chat ID :",
+  ALLOWED_CHAT_ID
+);
+
+console.log(
+  "📌 Topic  : #beach & pool"
+);
+
+console.log(
+  "🆔 Topic  :",
+  ALLOWED_TOPIC_ID
+);
+
+console.log(
+  "🍹 Menu   :",
+  drinks.length,
+  "minuman"
+);
+
+console.log(
+  "📋 Queue  : ONE BY ONE"
+);
+
+console.log(
+  "🎫 Reset  : 00:00 WIB"
+);
+
+console.log(
+  "📸 Bartender photo : ENABLED"
+);
+
+console.log(
+  "===================================="
+);
 
 // =====================================================
 // GRACEFUL STOP
 // =====================================================
 
-process.once("SIGINT", () => {
-  bot.stop("SIGINT");
-});
+process.once(
+  "SIGINT",
+  () => {
+    bot.stop(
+      "SIGINT"
+    );
+  }
+);
 
-process.once("SIGTERM", () => {
-  bot.stop("SIGTERM");
-});
+process.once(
+  "SIGTERM",
+  () => {
+    bot.stop(
+      "SIGTERM"
+    );
+  }
+);
